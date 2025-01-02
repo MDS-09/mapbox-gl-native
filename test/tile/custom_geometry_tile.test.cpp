@@ -31,6 +31,7 @@ public:
     GlyphManager glyphManager;
 
     TileParameters tileParameters{1.0,
+                                  nullopt,
                                   MapDebugOptions(),
                                   transformState,
                                   fileSource,

@@ -99,6 +99,39 @@ TEST(TileCover, PitchWithLargerResultSet) {
               (std::vector<OverscaledTileID>{cover.begin(), cover.begin() + 16}));
 }
 
+TEST(TileCover, TileCoverWithCircleScreen) {
+    Transform transform;
+    transform.resize({1024, 768});
+
+    // The values used here triggered the regression with left and right edge
+    // selection in tile_cover.cpp scanSpans.
+    transform.jumpTo(CameraOptions()
+                         .withCenter(LatLng{0.1, -0.1})
+                         .withPadding(EdgeInsets{400, 0, 0, 0})
+                         .withZoom(5)
+                         .withBearing(-142.2630000003529176)
+                         .withPitch(60.0));
+
+    auto cover = util::tileCover(transform.getState(), 5, std::nullopt, 5.0);
+    // Returned vector has above 100 elements, we check first 14 as there is a
+    // plan to return lower LOD for distant tiles.
+    EXPECT_EQ((std::vector<OverscaledTileID>{{5, 15, 16},
+                                             {5, 15, 17},
+                                             {5, 14, 16},
+                                             {5, 14, 17},
+                                             {5, 16, 16},
+                                             {5, 16, 17},
+                                             {5, 15, 15},
+                                             {5, 14, 15},
+                                             {5, 15, 18},
+                                             {5, 14, 18},
+                                             {5, 16, 15},
+                                             {5, 13, 16},
+                                             {5, 13, 17},
+                                             {5, 16, 18}}),
+              (std::vector<OverscaledTileID>{cover.begin(), cover.begin() + 14}));
+}
+
 TEST(TileCover, WorldZ1) {
     EXPECT_EQ((std::vector<UnwrappedTileID>{
                   {1, 0, 0},

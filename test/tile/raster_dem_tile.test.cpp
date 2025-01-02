@@ -26,6 +26,7 @@ public:
     Tileset tileset { { "https://example.com" }, { 0, 22 }, "none" };
 
     TileParameters tileParameters{1.0,
+                                  nullopt,
                                   MapDebugOptions(),
                                   transformState,
                                   fileSource,

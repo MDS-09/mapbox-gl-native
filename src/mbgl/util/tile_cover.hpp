@@ -35,7 +35,8 @@ int32_t coveringZoomLevel(double z, style::SourceType type, uint16_t tileSize);
 
 std::vector<OverscaledTileID> tileCover(const TransformState&,
                                         uint8_t z,
-                                        const optional<uint8_t>& overscaledZ = nullopt);
+                                        const optional<uint8_t>& overscaledZ = nullopt,
+                                        const optional<float>& screenRadius = nullopt);
 std::vector<UnwrappedTileID> tileCover(const LatLngBounds&, uint8_t z);
 std::vector<UnwrappedTileID> tileCover(const Geometry<double>&, uint8_t z);
 

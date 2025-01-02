@@ -85,9 +85,45 @@ static void TileCountPolygon(benchmark::State& state) {
     }
 }
 
+static void BenchmarkTileCoverWithScreenRadius(benchmark::State& state) {
+    uint8_t zoom = 8.0;
+    std::optional<uint8_t> overscaledZoom = std::nullopt;
+    double screenRadius = 5.0; // Example screen radius tilecoordinates
+    std::size_t length = 0;
+
+    Transform transform;
+    transform.resize({512, 512});
+    // slightly offset center so that tile order is better defined
+    transform.jumpTo(CameraOptions().withCenter(LatLng{0.1, -0.1}).withZoom(zoom).withBearing(5.0).withPitch(40.0));
+
+    while(state.KeepRunning()) {
+        auto tiles = util::tileCover(transform.getState(), zoom, overscaledZoom, screenRadius);
+        length += tiles.size();
+    }
+    (void)length;
+}
+
+static void BenchmarkTileCoverWithoutScreenRadius(benchmark::State& state) {
+    uint8_t zoom = 8.0;
+    std::optional<uint8_t> overscaledZoom = std::nullopt;
+    std::size_t length = 0;
+
+    Transform transform;
+    transform.resize({512, 512});
+    // slightly offset center so that tile order is better defined
+    transform.jumpTo(CameraOptions().withCenter(LatLng{0.1, -0.1}).withZoom(zoom).withBearing(5.0).withPitch(40.0));
+
+    while(state.KeepRunning()) {
+        auto tiles = util::tileCover(transform.getState(), zoom, overscaledZoom);
+        length += tiles.size();
+    }
+    (void)length;
+}
+
 BENCHMARK(TileCountBounds);
 BENCHMARK(TileCountPolygon);
 BENCHMARK(TileCoverPitchedViewport);
 BENCHMARK(TileCoverBounds);
 BENCHMARK(TileCoverPolygon);
-
+BENCHMARK(BenchmarkTileCoverWithScreenRadius);
+BENCHMARK(BenchmarkTileCoverWithoutScreenRadius);

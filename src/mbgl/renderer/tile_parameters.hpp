@@ -5,6 +5,7 @@
 #include <memory>
 
 #include <mapbox/std/weak.hpp>
+#include <mbgl/util/optional.hpp>
 
 namespace mbgl {
 
@@ -17,6 +18,7 @@ class GlyphManager;
 class TileParameters {
 public:
     const float pixelRatio;
+    optional<float> screenRadius;
     const MapDebugOptions debugOptions;
     const TransformState& transformState;
     std::shared_ptr<FileSource> fileSource;

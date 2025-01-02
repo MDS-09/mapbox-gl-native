@@ -1,0 +1,36 @@
+{
+    "name": "mapbox-container",
+    "build": {
+        "dockerfile": "../docker/Dockerfile",
+        "context": "..",
+        "args": {
+            "VARIANT": "buster"
+        }
+    },
+    "image": "mapbox-glfw",
+    "workspaceFolder": "/workspaces/mapbox-gl-native",
+    "remoteUser": "user",
+    "settings": {
+      "terminal.integrated.shell.linux": "/bin/bash"
+    },
+    "containerEnv": {
+        "DISPLAY": "host.docker.internal:0"  // expose the host's X server to the container
+    },
+    "runArgs": [
+        "--network=host",
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix",
+        "--cap-add=SYS_PTRACE",
+        "--security-opt",
+        "seccomp=unconfined"
+    ],
+    "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.docker"
+    ],
+    "features": {
+        "ghcr.io/sebst/devcontainer-features/desktop-xserver:0": {} // use the desktop-xserver feature
+    },
+    "postCreateCommand": "git config --global --add safe.directory /workspaces/mapbox-gl-native && if [ -d /workspaces/mapbox-gl-native ]; then rm -f /workspaces/mapbox-gl-native/package-lock.json /workspaces/mapbox-gl-native/yarn.lock /workspacesmapbox-gl-native/.vscode/*.lock; fi"
+  }
+  

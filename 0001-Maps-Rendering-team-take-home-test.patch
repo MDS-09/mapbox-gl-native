@@ -1,0 +1,655 @@
+From a7c1b84a126c7a621a351d5847e82c04ee6f6a46 Mon Sep 17 00:00:00 2001
+From: Maps Rendering team Homework Assignment <Maps Rendering team>
+Date: Thu, 2 Jan 2025 17:39:35 +0200
+Subject: [PATCH] Maps Rendering team take home test assignment- Mayur Fixes :
+ 1) added exception header in string.hpp
+
+Modifications:
+1) mbgl-glfw now accepts --radius in tilecoordinates to efficiently compute tilecover and tilepyramid in circular screen.
+
+Features:
+1) Docker extension and devcontainers. using vcXsrv to test mbgl-glfw and gdb server to debug application
+---
+ .devcontainer/devcontainer.json           | 36 ++++++++++
+ README.md                                 |  4 ++
+ benchmark/util/tilecover.benchmark.cpp    | 38 +++++++++-
+ docker/Dockerfile                         | 85 +++++++++++++++++++++++
+ docker/README.MD                          | 18 +++++
+ include/mbgl/map/map_options.hpp          | 16 +++++
+ include/mbgl/util/string.hpp              |  3 +-
+ platform/glfw/main.cpp                    |  8 ++-
+ src/mbgl/map/map_impl.cpp                 |  2 +
+ src/mbgl/map/map_impl.hpp                 |  2 +
+ src/mbgl/map/map_options.cpp              | 15 ++++
+ src/mbgl/renderer/render_orchestrator.cpp |  1 +
+ src/mbgl/renderer/tile_parameters.hpp     |  2 +
+ src/mbgl/renderer/tile_pyramid.cpp        |  4 +-
+ src/mbgl/renderer/update_parameters.hpp   |  1 +
+ src/mbgl/util/tile_cover.cpp              | 13 +++-
+ src/mbgl/util/tile_cover.hpp              |  3 +-
+ test/tile/custom_geometry_tile.test.cpp   |  1 +
+ test/tile/geojson_tile.test.cpp           |  1 +
+ test/tile/raster_dem_tile.test.cpp        |  1 +
+ test/tile/raster_tile.test.cpp            |  1 +
+ test/tile/tile_cache.test.cpp             |  1 +
+ test/tile/vector_tile.test.cpp            |  1 +
+ test/util/tile_cover.test.cpp             | 33 +++++++++
+ 24 files changed, 282 insertions(+), 8 deletions(-)
+ create mode 100644 .devcontainer/devcontainer.json
+ create mode 100644 docker/Dockerfile
+ create mode 100644 docker/README.MD
+
+diff --git a/.devcontainer/devcontainer.json b/.devcontainer/devcontainer.json
+new file mode 100644
+index 000000000..1d739b927
+--- /dev/null
++++ b/.devcontainer/devcontainer.json
+@@ -0,0 +1,36 @@
++{
++    "name": "mapbox-container",
++    "build": {
++        "dockerfile": "../docker/Dockerfile",
++        "context": "..",
++        "args": {
++            "VARIANT": "buster"
++        }
++    },
++    "image": "mapbox-glfw",
++    "workspaceFolder": "/workspaces/mapbox-gl-native",
++    "remoteUser": "user",
++    "settings": {
++      "terminal.integrated.shell.linux": "/bin/bash"
++    },
++    "containerEnv": {
++        "DISPLAY": "host.docker.internal:0"  // expose the host's X server to the container
++    },
++    "runArgs": [
++        "--network=host",
++        "--volume=/tmp/.X11-unix:/tmp/.X11-unix",
++        "--cap-add=SYS_PTRACE",
++        "--security-opt",
++        "seccomp=unconfined"
++    ],
++    "extensions": [
++        "ms-vscode.cpptools",
++        "ms-vscode.cmake-tools",
++        "ms-vscode.docker"
++    ],
++    "features": {
++        "ghcr.io/sebst/devcontainer-features/desktop-xserver:0": {} // use the desktop-xserver feature
++    },
++    "postCreateCommand": "git config --global --add safe.directory /workspaces/mapbox-gl-native && if [ -d /workspaces/mapbox-gl-native ]; then rm -f /workspaces/mapbox-gl-native/package-lock.json /workspaces/mapbox-gl-native/yarn.lock /workspacesmapbox-gl-native/.vscode/*.lock; fi"
++  }
++  
+\ No newline at end of file
+diff --git a/README.md b/README.md
+index ab256f46a..d77dcf054 100644
+--- a/README.md
++++ b/README.md
+@@ -27,6 +27,10 @@ $ cmake --build build
+ $ MAPBOX_ACCESS_TOKEN=my_access_token_here ./build/platform/glfw/mbgl-glfw
+ ```
+ 
++## [Developing] Docker
++added docker containers, unit test for tile-cover and benchmark test.
++configured launch.json for quick testing with demotiles style
++
+ ## License
+ 
+ Mapbox GL Native is licensed under the [2-Clause BSD license](LICENSE.md). The licenses of its dependencies are tracked via [FOSSA](https://app.fossa.io/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fmapbox%2Fmapbox-gl-native):
+diff --git a/benchmark/util/tilecover.benchmark.cpp b/benchmark/util/tilecover.benchmark.cpp
+index e966875a6..97b6b2022 100644
+--- a/benchmark/util/tilecover.benchmark.cpp
++++ b/benchmark/util/tilecover.benchmark.cpp
+@@ -85,9 +85,45 @@ static void TileCountPolygon(benchmark::State& state) {
+     }
+ }
+ 
++static void BenchmarkTileCoverWithScreenRadius(benchmark::State& state) {
++    uint8_t zoom = 8.0;
++    std::optional<uint8_t> overscaledZoom = std::nullopt;
++    double screenRadius = 5.0; // Example screen radius tilecoordinates
++    std::size_t length = 0;
++
++    Transform transform;
++    transform.resize({512, 512});
++    // slightly offset center so that tile order is better defined
++    transform.jumpTo(CameraOptions().withCenter(LatLng{0.1, -0.1}).withZoom(zoom).withBearing(5.0).withPitch(40.0));
++
++    while(state.KeepRunning()) {
++        auto tiles = util::tileCover(transform.getState(), zoom, overscaledZoom, screenRadius);
++        length += tiles.size();
++    }
++    (void)length;
++}
++
++static void BenchmarkTileCoverWithoutScreenRadius(benchmark::State& state) {
++    uint8_t zoom = 8.0;
++    std::optional<uint8_t> overscaledZoom = std::nullopt;
++    std::size_t length = 0;
++
++    Transform transform;
++    transform.resize({512, 512});
++    // slightly offset center so that tile order is better defined
++    transform.jumpTo(CameraOptions().withCenter(LatLng{0.1, -0.1}).withZoom(zoom).withBearing(5.0).withPitch(40.0));
++
++    while(state.KeepRunning()) {
++        auto tiles = util::tileCover(transform.getState(), zoom, overscaledZoom);
++        length += tiles.size();
++    }
++    (void)length;
++}
++
+ BENCHMARK(TileCountBounds);
+ BENCHMARK(TileCountPolygon);
+ BENCHMARK(TileCoverPitchedViewport);
+ BENCHMARK(TileCoverBounds);
+ BENCHMARK(TileCoverPolygon);
+-
++BENCHMARK(BenchmarkTileCoverWithScreenRadius);
++BENCHMARK(BenchmarkTileCoverWithoutScreenRadius);
+diff --git a/docker/Dockerfile b/docker/Dockerfile
+new file mode 100644
+index 000000000..76cf4f5ff
+--- /dev/null
++++ b/docker/Dockerfile
+@@ -0,0 +1,85 @@
++FROM ubuntu:22.04
++
++# Install build tools and dependencies notice the specific version of cmake
++RUN apt-get update \
++    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
++        apt-transport-https \
++        curl \
++        gnupg \
++        sudo `# allows dev to install more packages without switching to root or rebuilding container` \
++        software-properties-common \
++        build-essential \
++        libsqlite3-dev \
++        libcurl4-openssl-dev \
++        libglfw3-dev \
++        libuv1-dev \
++        libpng-dev \
++        libicu-dev \
++        libjpeg-turbo8-dev \
++        libwebp-dev \
++        xvfb \
++        clang \
++        git \
++        ccache \
++        ninja-build \
++        pkg-config \
++        clang-tidy \
++   && curl -LO https://github.com/Kitware/CMake/releases/download/v3.24.0/cmake-3.24.0-linux-x86_64.tar.gz \
++   && tar -zxvf cmake-3.24.0-linux-x86_64.tar.gz \
++   && sudo mv cmake-3.24.0-linux-x86_64 /opt/cmake \
++   && sudo ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake \
++   && cmake --version
++
++# install gdb for debugging in vscode containers
++RUN apt-get update && \
++    apt-get install -y \
++    libgl1-mesa-glx \
++    libgl1-mesa-dri \
++    xorg \
++    libglu1-mesa \
++    gdb \
++    gdbserver
++    
++
++RUN cmake --version
++
++# Install additional dependencies
++RUN apt-get update && apt-get install -y \
++    xorg \
++    libx11-dev
++
++RUN if [ "$(uname -m)" = "aarch64" ]; then \
++        curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-arm64 -o /usr/local/bin/bazel ;\
++    else \
++        curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-amd64 -o /usr/local/bin/bazel ;\
++    fi \
++    && chmod +x /usr/local/bin/bazel \
++    && :
++
++RUN apt-get update && apt-get install -y \
++    cmake \
++    libuv1-dev \
++    libcurl4-openssl-dev \
++    libglfw3-dev \
++    libpng-dev \
++    libsqlite3-dev \
++    zlib1g-dev \
++    libwebp-dev \
++    libjpeg-turbo8-dev
++
++WORKDIR /app
++
++ARG USERNAME=user
++ARG USER_UID=1000
++ARG USER_GID=$USER_UID
++
++# Create docker user with sudo rights as passed in by the build command
++# This was modeled on https://code.visualstudio.com/remote/advancedcontainers/add-nonroot-user
++# On a Mac, USER_GID might already exist, so ignore it if it fails (--force)
++RUN groupadd --force --gid $USER_GID $USERNAME \
++    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
++    && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
++    && chmod 0440 /etc/sudoers.d/$USERNAME
++
++# using vcxsrv display 0 for windows host machine
++ENV DISPLAY=:0
+diff --git a/docker/README.MD b/docker/README.MD
+new file mode 100644
+index 000000000..cbf154c0c
+--- /dev/null
++++ b/docker/README.MD
+@@ -0,0 +1,18 @@
++# Building with Docker
++
++Tested in VScode and DevContainers extensions.
++the extension will build the image and also launch the container.
++gdb server and display pipes will allow for debugging on host machine.
++
++
++> [!IMPORTANT]  
++> ubuntu:22.04
++
++> [!IMPORTANT]  
++> Install vcXsrv (tested on windows host for mbgl-glfw), launch display with index 0.
++
++
++marking safe repositories maybe needed manually as and when errors occur.
++use GCC toolchain in cmake to build.
++
++launch.json also attached to enable quick build and deployment and testing
+\ No newline at end of file
+diff --git a/include/mbgl/map/map_options.hpp b/include/mbgl/map/map_options.hpp
+index fcb8c8f32..4fe161755 100644
+--- a/include/mbgl/map/map_options.hpp
++++ b/include/mbgl/map/map_options.hpp
+@@ -5,6 +5,7 @@
+ #include <mbgl/util/size.hpp>
+ 
+ #include <memory>
++#include <mbgl/util/optional.hpp>
+ 
+ namespace mbgl {
+ 
+@@ -127,6 +128,14 @@ public:
+      */
+     MapOptions& withPixelRatio(float ratio);
+ 
++    /**
++     * @brief Sets the screenRadius.
++     *
++     * @param ratio ScreenRadius.
++     * @return reference to MapOptions for chaining options together.
++     */
++    MapOptions& withScreenRadius(float radius);
++
+     /**
+      * @brief Gets the previously set (or default) pixel ratio value.
+      *
+@@ -134,6 +143,13 @@ public:
+      */
+     float pixelRatio() const;
+ 
++    /**
++     * @brief Gets the screenRadius in TileCoordinates/Mercator.
++     *
++     * @return screenRadius in TileCoordinates.
++     */
++    optional<float> screenRadius() const;
++
+ private:
+     class Impl;
+     std::unique_ptr<Impl> impl_;
+diff --git a/include/mbgl/util/string.hpp b/include/mbgl/util/string.hpp
+index 27c3943c5..8bb0f46d9 100644
+--- a/include/mbgl/util/string.hpp
++++ b/include/mbgl/util/string.hpp
+@@ -3,7 +3,8 @@
+ #include <string>
+ #include <cstdlib>
+ #include <type_traits>
+-
++// added for compilation on linux with gcc
++#include <exception>
+ // Polyfill needed by Qt when building for Android with GCC
+ #if defined(__ANDROID__) && defined(__GLIBCXX__)
+ 
+diff --git a/platform/glfw/main.cpp b/platform/glfw/main.cpp
+index 3b45c4482..b45559788 100644
+--- a/platform/glfw/main.cpp
++++ b/platform/glfw/main.cpp
+@@ -54,6 +54,7 @@ int main(int argc, char *argv[]) {
+     args::ValueFlag<double> zoomValue(argumentParser, "number", "Zoom level", {'z', "zoom"});
+     args::ValueFlag<double> bearingValue(argumentParser, "degrees", "Bearing", {'b', "bearing"});
+     args::ValueFlag<double> pitchValue(argumentParser, "degrees", "Pitch", {'p', "pitch"});
++    args::ValueFlag<double> screenRadiusValue(argumentParser, "number", "Screen radius", {'r', "radius"});
+ 
+     try {
+         argumentParser.ParseCLI(argc, argv);
+@@ -79,6 +80,9 @@ int main(int argc, char *argv[]) {
+     if (bearingValue) settings.bearing = args::get(bearingValue);
+     if (pitchValue) settings.pitch = args::get(pitchValue);
+ 
++    float sr = -1.0;
++    if (screenRadiusValue) sr = args::get(screenRadiusValue);
++
+     const bool fullscreen = fullscreenFlag ? args::get(fullscreenFlag) : false;
+     const bool benchmark = benchmarkFlag ? args::get(benchmarkFlag) : false;
+     std::string style = styleValue ? args::get(styleValue) : "";
+@@ -122,7 +126,9 @@ int main(int argc, char *argv[]) {
+     GLFWRendererFrontend rendererFrontend { std::make_unique<mbgl::Renderer>(view->getRendererBackend(), view->getPixelRatio()), *view };
+ 
+     mbgl::Map map(rendererFrontend, *view,
+-                  mbgl::MapOptions().withSize(view->getSize()).withPixelRatio(view->getPixelRatio()), resourceOptions);
++                  mbgl::MapOptions().withSize(view->getSize())
++                  .withPixelRatio(view->getPixelRatio())
++                  .withScreenRadius(sr), resourceOptions);
+ 
+     backend.setMap(&map);
+ 
+diff --git a/src/mbgl/map/map_impl.cpp b/src/mbgl/map/map_impl.cpp
+index 0c93b78f1..b7f38cab4 100644
+--- a/src/mbgl/map/map_impl.cpp
++++ b/src/mbgl/map/map_impl.cpp
+@@ -17,6 +17,7 @@ Map::Impl::Impl(RendererFrontend& frontend_,
+       mode(mapOptions.mapMode()),
+       pixelRatio(mapOptions.pixelRatio()),
+       crossSourceCollisions(mapOptions.crossSourceCollisions()),
++      screenRadius(mapOptions.screenRadius()),
+       fileSource(std::move(fileSource_)),
+       style(std::make_unique<style::Style>(fileSource, pixelRatio)),
+       annotationManager(*style) {
+@@ -51,6 +52,7 @@ void Map::Impl::onUpdate() {
+     UpdateParameters params = {style->impl->isLoaded(),
+                                mode,
+                                pixelRatio,
++                               screenRadius,
+                                debugOptions,
+                                timePoint,
+                                transform.getState(),
+diff --git a/src/mbgl/map/map_impl.hpp b/src/mbgl/map/map_impl.hpp
+index abcfa972f..a78c2cf78 100644
+--- a/src/mbgl/map/map_impl.hpp
++++ b/src/mbgl/map/map_impl.hpp
+@@ -12,6 +12,7 @@
+ #include <mbgl/style/source.hpp>
+ #include <mbgl/style/style.hpp>
+ #include <mbgl/util/size.hpp>
++#include <mbgl/util/optional.hpp>
+ 
+ namespace mbgl {
+ 
+@@ -59,6 +60,7 @@ public:
+     const MapMode mode;
+     const float pixelRatio;
+     const bool crossSourceCollisions;
++    optional<float> screenRadius;
+ 
+     MapDebugOptions debugOptions { MapDebugOptions::NoDebug };
+ 
+diff --git a/src/mbgl/map/map_options.cpp b/src/mbgl/map/map_options.cpp
+index 4cebb6ada..2e03fafe6 100644
+--- a/src/mbgl/map/map_options.cpp
++++ b/src/mbgl/map/map_options.cpp
+@@ -11,6 +11,7 @@ public:
+     bool crossSourceCollisions = true;
+     Size size = { 64, 64 };
+     float pixelRatio = 1.0;
++    optional<float> screenRadius = nullopt;
+ };
+ 
+ // These requires the complete type of Impl.
+@@ -77,8 +78,22 @@ MapOptions& MapOptions::withPixelRatio(float ratio) {
+     return *this;
+ }
+ 
++MapOptions& MapOptions::withScreenRadius(float radius) {
++    if (radius < 0) {
++        impl_->screenRadius = nullopt;
++    }
++    else {
++        impl_->screenRadius = radius;
++    }
++    return *this;
++}
++
+ float MapOptions::pixelRatio() const {
+     return impl_->pixelRatio;
+ }
++ 
++optional<float> MapOptions::screenRadius() const {
++    return impl_->screenRadius;
++}
+ 
+ }  // namespace mbgl
+diff --git a/src/mbgl/renderer/render_orchestrator.cpp b/src/mbgl/renderer/render_orchestrator.cpp
+index d7f13695d..ffc749748 100644
+--- a/src/mbgl/renderer/render_orchestrator.cpp
++++ b/src/mbgl/renderer/render_orchestrator.cpp
+@@ -165,6 +165,7 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
+                                                                 : Duration::zero())};
+ 
+     const TileParameters tileParameters{updateParameters->pixelRatio,
++                                        updateParameters->screenRadius,
+                                         updateParameters->debugOptions,
+                                         updateParameters->transformState,
+                                         updateParameters->fileSource,
+diff --git a/src/mbgl/renderer/tile_parameters.hpp b/src/mbgl/renderer/tile_parameters.hpp
+index e76d8d0f8..0cad19dd2 100644
+--- a/src/mbgl/renderer/tile_parameters.hpp
++++ b/src/mbgl/renderer/tile_parameters.hpp
+@@ -5,6 +5,7 @@
+ #include <memory>
+ 
+ #include <mapbox/std/weak.hpp>
++#include <mbgl/util/optional.hpp>
+ 
+ namespace mbgl {
+ 
+@@ -17,6 +18,7 @@ class GlyphManager;
+ class TileParameters {
+ public:
+     const float pixelRatio;
++    optional<float> screenRadius;
+     const MapDebugOptions debugOptions;
+     const TransformState& transformState;
+     std::shared_ptr<FileSource> fileSource;
+diff --git a/src/mbgl/renderer/tile_pyramid.cpp b/src/mbgl/renderer/tile_pyramid.cpp
+index 39a9c5928..0abca1773 100644
+--- a/src/mbgl/renderer/tile_pyramid.cpp
++++ b/src/mbgl/renderer/tile_pyramid.cpp
+@@ -118,11 +118,11 @@ void TilePyramid::update(const std::vector<Immutable<style::LayerProperties>>& l
+             }
+ 
+             if (panZoom < idealZoom) {
+-                panTiles = util::tileCover(parameters.transformState, panZoom);
++                panTiles = util::tileCover(parameters.transformState, panZoom, nullopt, parameters.screenRadius);
+             }
+         }
+ 
+-        idealTiles = util::tileCover(parameters.transformState, idealZoom, tileZoom);
++        idealTiles = util::tileCover(parameters.transformState, idealZoom, tileZoom, parameters.screenRadius);
+         if (parameters.mode == MapMode::Tile && type != SourceType::Raster && type != SourceType::RasterDEM &&
+             idealTiles.size() > 1) {
+             mbgl::Log::Warning(mbgl::Event::General,
+diff --git a/src/mbgl/renderer/update_parameters.hpp b/src/mbgl/renderer/update_parameters.hpp
+index 47192b994..e46aa3a33 100644
+--- a/src/mbgl/renderer/update_parameters.hpp
++++ b/src/mbgl/renderer/update_parameters.hpp
+@@ -23,6 +23,7 @@ public:
+     const bool styleLoaded;
+     const MapMode mode;
+     const float pixelRatio;
++    const optional<float> screenRadius;
+     const MapDebugOptions debugOptions;
+     const TimePoint timePoint;
+     const TransformState transformState;
+diff --git a/src/mbgl/util/tile_cover.cpp b/src/mbgl/util/tile_cover.cpp
+index fb4579b9a..474ed2f95 100644
+--- a/src/mbgl/util/tile_cover.cpp
++++ b/src/mbgl/util/tile_cover.cpp
+@@ -147,7 +147,10 @@ int32_t coveringZoomLevel(double zoom, style::SourceType type, uint16_t size) {
+     }
+ }
+ 
+-std::vector<OverscaledTileID> tileCover(const TransformState& state, uint8_t z, const optional<uint8_t>& overscaledZ) {
++std::vector<OverscaledTileID> tileCover(const TransformState& state,
++                                        uint8_t z,
++                                        const optional<uint8_t>& overscaledZ,
++                                        const optional<float>& screenRadius) {
+     struct Node {
+         AABB aabb;
+         uint8_t zoom;
+@@ -234,7 +237,13 @@ std::vector<OverscaledTileID> tileCover(const TransformState& state, uint8_t z,
+                 const double dx = node.wrap * numTiles + node.x + 0.5 - centerCoord[0];
+                 const double dy = node.y + 0.5 - centerCoord[1];
+ 
+-                result.push_back({id, dx * dx + dy * dy});
++                if(screenRadius.has_value()) {
++                    if((dx * dx + dy * dy) <= screenRadius.value()) {
++                        result.push_back({id, dx * dx + dy * dy});
++                    }
++                } else {
++                    result.push_back({id, dx * dx + dy * dy});
++                }
+             }
+             continue;
+         }
+diff --git a/src/mbgl/util/tile_cover.hpp b/src/mbgl/util/tile_cover.hpp
+index 5e09d8a67..5af9c25d6 100644
+--- a/src/mbgl/util/tile_cover.hpp
++++ b/src/mbgl/util/tile_cover.hpp
+@@ -35,7 +35,8 @@ int32_t coveringZoomLevel(double z, style::SourceType type, uint16_t tileSize);
+ 
+ std::vector<OverscaledTileID> tileCover(const TransformState&,
+                                         uint8_t z,
+-                                        const optional<uint8_t>& overscaledZ = nullopt);
++                                        const optional<uint8_t>& overscaledZ = nullopt,
++                                        const optional<float>& screenRadius = nullopt);
+ std::vector<UnwrappedTileID> tileCover(const LatLngBounds&, uint8_t z);
+ std::vector<UnwrappedTileID> tileCover(const Geometry<double>&, uint8_t z);
+ 
+diff --git a/test/tile/custom_geometry_tile.test.cpp b/test/tile/custom_geometry_tile.test.cpp
+index 28f2b7ef5..01a3fe94b 100644
+--- a/test/tile/custom_geometry_tile.test.cpp
++++ b/test/tile/custom_geometry_tile.test.cpp
+@@ -31,6 +31,7 @@ public:
+     GlyphManager glyphManager;
+ 
+     TileParameters tileParameters{1.0,
++                                  nullopt,
+                                   MapDebugOptions(),
+                                   transformState,
+                                   fileSource,
+diff --git a/test/tile/geojson_tile.test.cpp b/test/tile/geojson_tile.test.cpp
+index bffd99999..ac84896c0 100644
+--- a/test/tile/geojson_tile.test.cpp
++++ b/test/tile/geojson_tile.test.cpp
+@@ -32,6 +32,7 @@ public:
+     Tileset tileset { { "https://example.com" }, { 0, 22 }, "none" };
+ 
+     TileParameters tileParameters{1.0,
++                                  nullopt,
+                                   MapDebugOptions(),
+                                   transformState,
+                                   fileSource,
+diff --git a/test/tile/raster_dem_tile.test.cpp b/test/tile/raster_dem_tile.test.cpp
+index 3c12e7b4b..dc9e03037 100644
+--- a/test/tile/raster_dem_tile.test.cpp
++++ b/test/tile/raster_dem_tile.test.cpp
+@@ -26,6 +26,7 @@ public:
+     Tileset tileset { { "https://example.com" }, { 0, 22 }, "none" };
+ 
+     TileParameters tileParameters{1.0,
++                                  nullopt,
+                                   MapDebugOptions(),
+                                   transformState,
+                                   fileSource,
+diff --git a/test/tile/raster_tile.test.cpp b/test/tile/raster_tile.test.cpp
+index db5087dc3..72710f115 100644
+--- a/test/tile/raster_tile.test.cpp
++++ b/test/tile/raster_tile.test.cpp
+@@ -26,6 +26,7 @@ public:
+     Tileset tileset { { "https://example.com" }, { 0, 22 }, "none" };
+ 
+     TileParameters tileParameters{1.0,
++                                  nullopt,
+                                   MapDebugOptions(),
+                                   transformState,
+                                   fileSource,
+diff --git a/test/tile/tile_cache.test.cpp b/test/tile/tile_cache.test.cpp
+index 64444f91c..9d6d84976 100644
+--- a/test/tile/tile_cache.test.cpp
++++ b/test/tile/tile_cache.test.cpp
+@@ -35,6 +35,7 @@ public:
+     Tileset tileset{{"https://example.com"}, {0, 22}, "none"};
+ 
+     TileParameters tileParameters{1.0,
++                                  nullopt,
+                                   MapDebugOptions(),
+                                   transformState,
+                                   fileSource,
+diff --git a/test/tile/vector_tile.test.cpp b/test/tile/vector_tile.test.cpp
+index b28661d93..b69c46abe 100644
+--- a/test/tile/vector_tile.test.cpp
++++ b/test/tile/vector_tile.test.cpp
+@@ -32,6 +32,7 @@ public:
+     Tileset tileset { { "https://example.com" }, { 0, 22 }, "none" };
+ 
+     TileParameters tileParameters{1.0,
++                                  nullopt,
+                                   MapDebugOptions(),
+                                   transformState,
+                                   fileSource,
+diff --git a/test/util/tile_cover.test.cpp b/test/util/tile_cover.test.cpp
+index 2401608d4..f6842acad 100644
+--- a/test/util/tile_cover.test.cpp
++++ b/test/util/tile_cover.test.cpp
+@@ -99,6 +99,39 @@ TEST(TileCover, PitchWithLargerResultSet) {
+               (std::vector<OverscaledTileID>{cover.begin(), cover.begin() + 16}));
+ }
+ 
++TEST(TileCover, TileCoverWithCircleScreen) {
++    Transform transform;
++    transform.resize({1024, 768});
++
++    // The values used here triggered the regression with left and right edge
++    // selection in tile_cover.cpp scanSpans.
++    transform.jumpTo(CameraOptions()
++                         .withCenter(LatLng{0.1, -0.1})
++                         .withPadding(EdgeInsets{400, 0, 0, 0})
++                         .withZoom(5)
++                         .withBearing(-142.2630000003529176)
++                         .withPitch(60.0));
++
++    auto cover = util::tileCover(transform.getState(), 5, std::nullopt, 5.0);
++    // Returned vector has above 100 elements, we check first 14 as there is a
++    // plan to return lower LOD for distant tiles.
++    EXPECT_EQ((std::vector<OverscaledTileID>{{5, 15, 16},
++                                             {5, 15, 17},
++                                             {5, 14, 16},
++                                             {5, 14, 17},
++                                             {5, 16, 16},
++                                             {5, 16, 17},
++                                             {5, 15, 15},
++                                             {5, 14, 15},
++                                             {5, 15, 18},
++                                             {5, 14, 18},
++                                             {5, 16, 15},
++                                             {5, 13, 16},
++                                             {5, 13, 17},
++                                             {5, 16, 18}}),
++              (std::vector<OverscaledTileID>{cover.begin(), cover.begin() + 14}));
++}
++
+ TEST(TileCover, WorldZ1) {
+     EXPECT_EQ((std::vector<UnwrappedTileID>{
+                   {1, 0, 0},
+-- 
+2.27.0.windows.1
+

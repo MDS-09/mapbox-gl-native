@@ -165,6 +165,7 @@ std::unique_ptr<RenderTree> RenderOrchestrator::createRenderTree(
                                                                 : Duration::zero())};
 
     const TileParameters tileParameters{updateParameters->pixelRatio,
+                                        updateParameters->screenRadius,
                                         updateParameters->debugOptions,
                                         updateParameters->transformState,
                                         updateParameters->fileSource,

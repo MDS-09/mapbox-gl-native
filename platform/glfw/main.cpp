@@ -54,6 +54,7 @@ int main(int argc, char *argv[]) {
     args::ValueFlag<double> zoomValue(argumentParser, "number", "Zoom level", {'z', "zoom"});
     args::ValueFlag<double> bearingValue(argumentParser, "degrees", "Bearing", {'b', "bearing"});
     args::ValueFlag<double> pitchValue(argumentParser, "degrees", "Pitch", {'p', "pitch"});
+    args::ValueFlag<double> screenRadiusValue(argumentParser, "number", "Screen radius", {'r', "radius"});
 
     try {
         argumentParser.ParseCLI(argc, argv);
@@ -78,6 +79,9 @@ int main(int argc, char *argv[]) {
     if (zoomValue) settings.zoom = args::get(zoomValue);
     if (bearingValue) settings.bearing = args::get(bearingValue);
     if (pitchValue) settings.pitch = args::get(pitchValue);
+
+    float sr = -1.0;
+    if (screenRadiusValue) sr = args::get(screenRadiusValue);
 
     const bool fullscreen = fullscreenFlag ? args::get(fullscreenFlag) : false;
     const bool benchmark = benchmarkFlag ? args::get(benchmarkFlag) : false;
@@ -122,7 +126,9 @@ int main(int argc, char *argv[]) {
     GLFWRendererFrontend rendererFrontend { std::make_unique<mbgl::Renderer>(view->getRendererBackend(), view->getPixelRatio()), *view };
 
     mbgl::Map map(rendererFrontend, *view,
-                  mbgl::MapOptions().withSize(view->getSize()).withPixelRatio(view->getPixelRatio()), resourceOptions);
+                  mbgl::MapOptions().withSize(view->getSize())
+                  .withPixelRatio(view->getPixelRatio())
+                  .withScreenRadius(sr), resourceOptions);
 
     backend.setMap(&map);
 

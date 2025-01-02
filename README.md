@@ -27,6 +27,10 @@ $ cmake --build build
 $ MAPBOX_ACCESS_TOKEN=my_access_token_here ./build/platform/glfw/mbgl-glfw
 ```
 
+## [Developing] Docker
+added docker containers, unit test for tile-cover and benchmark test.
+configured launch.json for quick testing with demotiles style
+
 ## License
 
 Mapbox GL Native is licensed under the [2-Clause BSD license](LICENSE.md). The licenses of its dependencies are tracked via [FOSSA](https://app.fossa.io/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fmapbox%2Fmapbox-gl-native):

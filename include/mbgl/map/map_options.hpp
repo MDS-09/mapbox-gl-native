@@ -5,6 +5,7 @@
 #include <mbgl/util/size.hpp>
 
 #include <memory>
+#include <mbgl/util/optional.hpp>
 
 namespace mbgl {
 
@@ -128,11 +129,26 @@ public:
     MapOptions& withPixelRatio(float ratio);
 
     /**
+     * @brief Sets the screenRadius.
+     *
+     * @param ratio ScreenRadius.
+     * @return reference to MapOptions for chaining options together.
+     */
+    MapOptions& withScreenRadius(float radius);
+
+    /**
      * @brief Gets the previously set (or default) pixel ratio value.
      *
      * @return pixel ratio value.
      */
     float pixelRatio() const;
+
+    /**
+     * @brief Gets the screenRadius in TileCoordinates/Mercator.
+     *
+     * @return screenRadius in TileCoordinates.
+     */
+    optional<float> screenRadius() const;
 
 private:
     class Impl;

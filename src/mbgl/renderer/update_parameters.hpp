@@ -23,6 +23,7 @@ public:
     const bool styleLoaded;
     const MapMode mode;
     const float pixelRatio;
+    const optional<float> screenRadius;
     const MapDebugOptions debugOptions;
     const TimePoint timePoint;
     const TransformState transformState;

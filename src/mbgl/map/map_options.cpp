@@ -11,6 +11,7 @@ public:
     bool crossSourceCollisions = true;
     Size size = { 64, 64 };
     float pixelRatio = 1.0;
+    optional<float> screenRadius = nullopt;
 };
 
 // These requires the complete type of Impl.
@@ -77,8 +78,22 @@ MapOptions& MapOptions::withPixelRatio(float ratio) {
     return *this;
 }
 
+MapOptions& MapOptions::withScreenRadius(float radius) {
+    if (radius < 0) {
+        impl_->screenRadius = nullopt;
+    }
+    else {
+        impl_->screenRadius = radius;
+    }
+    return *this;
+}
+
 float MapOptions::pixelRatio() const {
     return impl_->pixelRatio;
+}
+ 
+optional<float> MapOptions::screenRadius() const {
+    return impl_->screenRadius;
 }
 
 }  // namespace mbgl

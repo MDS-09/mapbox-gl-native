@@ -12,6 +12,7 @@
 #include <mbgl/style/source.hpp>
 #include <mbgl/style/style.hpp>
 #include <mbgl/util/size.hpp>
+#include <mbgl/util/optional.hpp>
 
 namespace mbgl {
 
@@ -59,6 +60,7 @@ public:
     const MapMode mode;
     const float pixelRatio;
     const bool crossSourceCollisions;
+    optional<float> screenRadius;
 
     MapDebugOptions debugOptions { MapDebugOptions::NoDebug };
 

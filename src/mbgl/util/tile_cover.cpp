@@ -147,7 +147,10 @@ int32_t coveringZoomLevel(double zoom, style::SourceType type, uint16_t size) {
     }
 }
 
-std::vector<OverscaledTileID> tileCover(const TransformState& state, uint8_t z, const optional<uint8_t>& overscaledZ) {
+std::vector<OverscaledTileID> tileCover(const TransformState& state,
+                                        uint8_t z,
+                                        const optional<uint8_t>& overscaledZ,
+                                        const optional<float>& screenRadius) {
     struct Node {
         AABB aabb;
         uint8_t zoom;
@@ -234,7 +237,13 @@ std::vector<OverscaledTileID> tileCover(const TransformState& state, uint8_t z, 
                 const double dx = node.wrap * numTiles + node.x + 0.5 - centerCoord[0];
                 const double dy = node.y + 0.5 - centerCoord[1];
 
-                result.push_back({id, dx * dx + dy * dy});
+                if(screenRadius.has_value()) {
+                    if((dx * dx + dy * dy) <= screenRadius.value()) {
+                        result.push_back({id, dx * dx + dy * dy});
+                    }
+                } else {
+                    result.push_back({id, dx * dx + dy * dy});
+                }
             }
             continue;
         }
